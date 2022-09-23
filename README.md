@@ -19,3 +19,6 @@ This project uses Python libraries (version 3.8) such as:
 + bs4
 + etc
 
+# Demonstration
+![Alt Text](assets/demonstartion_1.png)
+![Alt Text](assets/demonstration_2.PNG)
