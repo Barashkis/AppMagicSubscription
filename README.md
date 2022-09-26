@@ -21,4 +21,4 @@ This project uses Python libraries (version 3.8) such as:
 
 # Demonstration
 ![Alt Text](assets/demonstartion_1.png)
-![Alt Text](assets/demonstration_2.PNG)
+![Alt Text](assets/demonstration_2.png)
