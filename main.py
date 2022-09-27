@@ -24,7 +24,7 @@ async def auth_and_get_main_page_data(url):
     options = uc.ChromeOptions()
     options.add_argument('--start-maximized')
 
-    driver = uc.Chrome(options=options, version_main=104)
+    driver = uc.Chrome(options=options, version_main=105)
     wait = WebDriverWait(driver, 60)
     try:
         driver.get(url)
@@ -68,6 +68,25 @@ async def auth_and_get_main_page_data(url):
         driver.quit()
 
 
+def get_top_variables(percent_key, countries, country_codes):
+    top_country = None
+    top_percent = None
+
+    top_percents = [country[percent_key] for country in countries]
+    if top_percents:
+        top_percent = max(top_percents)
+        if top_percent != 0:
+            top_country_code = countries[top_percents.index(top_percent)]["country"]
+            top_percent = f"{round(top_percent, 2)}%"
+            for country_code in country_codes:
+                if country_code["isoCode"] == top_country_code:
+                    top_country = country_code["name"]
+
+                    break
+
+    return top_percent, top_country
+
+
 async def proceed_game(game_url, filename):
     options = ChromeOptions()
     options.add_argument('--start-maximized')
@@ -84,105 +103,89 @@ async def proceed_game(game_url, filename):
                                                                "div/div[2]/div[1]/similarity-widget")))
         await asyncio.sleep(.5)
 
+        search_by_ids_found = False
+        ltv_found = False
+        data_countries_found = False
+
         for request in driver.requests:
+            try:
+                body = decode(request.response.body, request.response.headers.get("content-encoding"))
+                data = json.loads(body.decode("utf-8"))["data"]
+            except Exception:
+                continue
+
             if "search-by-ids" in request.url:
-                body = decode(request.response.body, request.response.headers.get("content-encoding"))
-                game_data = json.loads(body.decode("utf-8"))["data"][0]
+                search_by_ids_found = True
 
-            if "ltv" in request.url:
-                body = decode(request.response.body, request.response.headers.get("content-encoding"))
-                ltv_data = json.loads(body.decode("utf-8"))["data"]
+                game_data = data[0]
 
-            if "data-countries" in request.url:
-                body = decode(request.response.body, request.response.headers.get("content-encoding"))
-                countries_data = json.loads(body.decode("utf-8"))["data"]
+                game_name = game_data["name"].strip()
+                publisher_name = game_data["unitedPublisher"]["name"]
 
-        game_name = game_data["name"]
-        publisher_name = game_data["unitedPublisher"]["name"]
+                downloads = game_data["downloads"]
+                if downloads == 0:
+                    downloads = None
+                elif downloads == 1:
+                    downloads = 5000
 
-        downloads = game_data["downloads"]
-        if downloads == 0:
-            downloads = None
-        elif downloads == 1:
-            downloads = 5000
+                revenue = game_data["revenue"]
+                if revenue == 0:
+                    revenue = None
+                elif revenue == 1:
+                    revenue = 5000
 
-        revenue = game_data["revenue"]
-        if revenue == 0:
-            revenue = None
+                art_styles = []
+                setting = None
+                game_tags = []
 
-        art_styles = []
-        setting = None
-        game_tags = []
+                tags = game_data["tags"]
+                for tag in tags:
+                    tag_type = tag["type"]
+                    tag_name = tag["name"]
+                    if tag_type in ["games", "meta", "apps"]:
+                        game_tags.append(tag_name)
+                    elif tag_type == "artstyles":
+                        art_styles.append(tag_name)
+                    else:
+                        setting = tag_name
+            elif "ltv" in request.url:
+                ltv_found = True
 
-        tags = game_data["tags"]
-        for tag in tags:
-            tag_type = tag["type"]
-            tag_name = tag["name"]
-            if tag_type in ["games", "meta", "apps"]:
-                game_tags.append(tag_name)
-            elif tag_type == "artstyles":
-                art_styles.append(tag_name)
-            else:
-                setting = tag_name
+                ltv_data = data
 
-        ltv_west = 0
-        ltv_east = 0
-        ltv_global = 0
+                ltv_west = 0
+                ltv_east = 0
+                ltv_global = 0
 
-        ltvs = ltv_data
-        for ltv in ltvs:
-            ltv_title = ltv["name"]
-            ltv_value = ltv["ltv"]
-            if not ltv_value:
-                ltv_value = 0
+                ltvs = ltv_data
+                for ltv in ltvs:
+                    ltv_title = ltv["name"]
+                    ltv_value = ltv["ltv"]
+                    if not ltv_value:
+                        ltv_value = 0
 
-            if ltv_title == "Tier-1 East":
-                ltv_east = round(ltv_value, 2)
-            elif ltv_title == "Tier-1 West":
-                ltv_west = round(ltv_value, 2)
-            else:
-                ltv_global = round(ltv_value, 2)
+                    if ltv_title == "Tier-1 East":
+                        ltv_east = round(ltv_value, 2)
+                    elif ltv_title == "Tier-1 West":
+                        ltv_west = round(ltv_value, 2)
+                    else:
+                        ltv_global = round(ltv_value, 2)
+            elif "data-countries" in request.url:
+                data_countries_found = True
 
-        countries = [country_data for country_data in countries_data if country_data["country"] != "WW"]
-        with open("countries.json") as file:
-            country_codes = json.load(file)
+                countries_data = data
 
-        top_download_country = None
-        top_download_percent = None
-        top_revenue_country = None
-        top_revenue_percent = None
+                countries = [country_data for country_data in countries_data if country_data["country"] != "WW"]
+                with open("countries.json") as file:
+                    country_codes = json.load(file)
 
-        top_download_percents = [country["percent_downloads"] for country in countries]
-        if top_download_percents:
-            top_download_percent = max(top_download_percents)
-            if top_download_percent != 0:
-                top_download_country_code = countries[top_download_percents.index(top_download_percent)]["country"]
-                top_download_percent = f"{round(top_download_percent, 2)}%"
-                for country_code in country_codes:
-                    if country_code["isoCode"] == top_download_country_code:
-                        top_download_country = country_code["name"]
+                top_download_percent, top_download_country = get_top_variables("percent_downloads", countries, country_codes)
+                top_revenue_percent, top_revenue_country = get_top_variables("percent_revenue", countries, country_codes)
 
-                        break
-            else:
-                top_download_percent = None
+            if all([search_by_ids_found, data_countries_found, ltv_found]):
+                break
 
-        top_revenue_percents = [country["percent_revenue"] for country in countries]
-        if top_revenue_percents:
-            top_revenue_percent = max(top_revenue_percents)
-            if top_revenue_percent != 0:
-                top_revenue_country_code = countries[top_revenue_percents.index(top_revenue_percent)]["country"]
-                top_revenue_percent = f"{round(top_revenue_percent, 2)}%"
-                for country_code in country_codes:
-                    if country_code["isoCode"] == top_revenue_country_code:
-                        top_revenue_country = country_code["name"]
-
-                        break
-            else:
-                top_revenue_percent = None
-
-        google_play_store_link, app_store_store_link, google_play_last_update_date, app_store_last_update_date, \
-            google_play_rating_score, app_store_rating_score, google_play_amount_of_ratings, \
-            app_store_amount_of_ratings = await get_apps_data(driver, wait, game_name)
+        stores_info = await get_apps_data(driver, wait, game_name)
 
         with open(fr"data\{filename}", "a", encoding="utf-8", newline="") as file:
             writer = csv.writer(file, delimiter=";")
@@ -202,14 +205,7 @@ async def proceed_game(game_url, filename):
                     ", ".join(game_tags),
                     setting,
                     ", ".join(art_styles),
-                    google_play_store_link,
-                    app_store_store_link,
-                    google_play_last_update_date,
-                    app_store_last_update_date,
-                    google_play_rating_score,
-                    app_store_rating_score,
-                    google_play_amount_of_ratings,
-                    app_store_amount_of_ratings,
+                    *stores_info,
                     game_url
                 )
             )
@@ -249,23 +245,19 @@ async def get_apps_data(driver, wait, game_name):
 
         driver.find_element(By.XPATH, f"//*[@id='mat-tab-content-0-0']/div/info/div[1]/div"
                                       f"/app-info-select-panel/div/div[{i}]").click()
-        wait.until(EC.visibility_of_element_located((By.XPATH, "/html/body/app-root/layout/div[2]/app-page/"
-                                                               "app-info-dialog/div[1]/div[3]/widgets-wrap/"
-                                                               "div/div[2]/div[1]/similarity-widget")))
+        wait.until(EC.visibility_of_element_located((By.XPATH, '//*[@id="mat-tab-content-0-0"]/div/info/div[1]/a')))
         await asyncio.sleep(.5)
 
         src = driver.page_source
         app_soup = BeautifulSoup(src, "lxml")
 
         store_name = app_soup.find("span", class_="store-icon-name").find("span").get("title").strip().lower()
-        app_name = app_soup.find("span", class_="line-height-18").get("title")
+        app_name = app_soup.find("span", class_="line-height-18").get("title").strip()
 
         if game_name.lower()[0] == app_name.lower()[0]:
-            if store_name == "google play" and not google_play_found:
+            if "google play" in store_name and not google_play_found:
                 try:
-                    google_play_store_link = app_soup.find("a", class_="app-link").get("href")
-                    if not google_play_store_link:
-                        google_play_store_link = ""
+                    google_play_store_link = app_soup.find("a", class_="app-link")["href"]
                 except Exception:
                     pass
                 try:
@@ -287,12 +279,9 @@ async def get_apps_data(driver, wait, game_name):
                     pass
 
                 google_play_found = True
-            elif ("iphone" in store_name or "ipad" in store_name) and not app_store_found:
+            elif filter(lambda type_: type_ in store_name, ["iphone", "ipad"]) and not app_store_found:
                 try:
-                    app_store_store_link = app_soup.find("a", class_="app-link").get("href")
-
-                    if not app_store_store_link:
-                        app_store_store_link = ""
+                    app_store_store_link = app_soup.find("a", class_="app-link")["href"]
                 except Exception:
                     pass
                 try:
