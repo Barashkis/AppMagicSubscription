@@ -20,7 +20,7 @@ from fake_useragent import UserAgent
 from config import appmagic_password, appmagic_login
 
 
-async def auth_and_get_main_page_data(url):
+async def auth_and_get_main_page_data(url: str) -> tuple:
     options = uc.ChromeOptions()
     options.add_argument('--start-maximized')
 
@@ -68,7 +68,7 @@ async def auth_and_get_main_page_data(url):
         driver.quit()
 
 
-def get_top_variables(percent_key, countries, country_codes):
+def get_top_variables(percent_key: str, countries: list, country_codes: list[dict]) -> tuple:
     top_country = None
     top_percent = None
 
@@ -87,7 +87,7 @@ def get_top_variables(percent_key, countries, country_codes):
     return top_percent, top_country
 
 
-async def proceed_game(game_url, filename):
+async def proceed_game(game_url: str, filename: str):
     options = ChromeOptions()
     options.add_argument('--start-maximized')
     options.add_argument(f'--user-agent={UserAgent().random}')
@@ -214,7 +214,7 @@ async def proceed_game(game_url, filename):
         pass
 
 
-async def get_apps_data(driver, wait, game_name):
+async def get_apps_data(driver: webdriver_wire.Chrome(), wait: WebDriverWait, game_name: str) -> tuple:
     wait.until(EC.visibility_of_element_located((By.XPATH, "/html/body/app-root/layout/div[2]/app-page/"
                                                            "app-info-dialog/div[1]/div[3]/widgets-wrap/"
                                                            "div/div[2]/div[1]/similarity-widget")))
